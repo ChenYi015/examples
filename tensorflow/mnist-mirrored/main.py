@@ -147,7 +147,6 @@ def train(args, model, ds_train, callbacks):
     """Train model."""
     model.fit(
         ds_train,
-        batch_size=args.batch_size,
         epochs=args.epochs,
         callbacks=callbacks
     )
@@ -157,7 +156,6 @@ def test(args, model, ds_test, callbacks):
     """Test model."""
     model.evaluate(
         ds_test,
-        batch_size=args.test_batch_size,
         verbose=2,
         callbacks=callbacks
     )

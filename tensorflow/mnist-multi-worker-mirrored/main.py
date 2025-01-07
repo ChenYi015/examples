@@ -95,7 +95,7 @@ def create_model(args):
     return model
 
 
-def load_data(args, buffer_size, batch_size):
+def load_data(args, batch_size):
     """Load MNIST dataset."""
     if args.data_dir:
         # Load MNIST dataset from local directory
@@ -117,9 +117,9 @@ def load_data(args, buffer_size, batch_size):
         (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
     x_train, x_test = x_train / 255.0, x_test / 255.0
-
+    n = len(x_train)
     ds_train = tf.data.Dataset.from_tensor_slices(
-        (x_train, y_train)).shuffle(buffer_size).batch(batch_size)
+        (x_train, y_train)).shuffle(n).repeat().batch(batch_size)
     ds_test = tf.data.Dataset.from_tensor_slices(
         (x_test, y_test)).batch(batch_size)
 
@@ -148,7 +148,6 @@ def train(args, model, ds_train, callbacks):
     """Train model."""
     model.fit(
         ds_train,
-        batch_size=args.batch_size,
         epochs=args.epochs,
         callbacks=callbacks
     )
@@ -158,10 +157,13 @@ def test(args, model, ds_test, callbacks):
     """Test model."""
     model.evaluate(
         ds_test,
-        batch_size=args.test_batch_size,
         verbose=2,
         callbacks=callbacks
     )
+
+
+def is_chief(task_type, task_id):
+    return task_type == 'chief' or (task_type == 'worker' and task_id == 0)
 
 
 def main():
@@ -170,13 +172,14 @@ def main():
     strategy = tf.distribute.MultiWorkerMirroredStrategy()
     tf_config = json.loads(os.environ['TF_CONFIG'])
     num_workers = len(tf_config['cluster']['worker'])
+    task_type, task_id = strategy.cluster_resolver.task_type, strategy.cluster_resolver.task_id
     print(f'TF_CONFIG: {tf_config}')
     print(f'Number of workers: {num_workers}')
+    print(f'Task type: {task_type}, Task id: {task_id}')
 
-    buffer_size = 1000
     batch_size_per_worker = args.batch_size
     batch_size = batch_size_per_worker * num_workers
-    ds_train, ds_test = load_data(args, buffer_size, batch_size)
+    ds_train, ds_test = load_data(args, batch_size)
     print(f'Batch size per worker: {batch_size_per_worker}')
     print(f'Global batch size: {batch_size}')
 
@@ -192,7 +195,7 @@ def main():
 
     test(args, model, ds_test, callbacks)
 
-    if args.save_model:
+    if args.save_model and is_chief(task_type, task_id):
         model.save('mnist.keras')
 
 
